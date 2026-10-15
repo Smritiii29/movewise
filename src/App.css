@@ -2524,3 +2524,10 @@
   opacity: 0.6;
   cursor: wait;
 }
+
+.offers-helper {
+  margin: -5px 0 16px;
+  color: var(--soft-charcoal);
+  font-size: 12px;
+  line-height: 1.6;
+}
