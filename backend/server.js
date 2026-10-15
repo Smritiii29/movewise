@@ -1,8 +1,12 @@
-
 import express from 'express'
 import cors from 'cors'
-import 'dotenv/config'
+import dotenv from 'dotenv'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: resolve(__dirname, '.env') })
 
 const app = express()
 const PORT = process.env.PORT || 3000
