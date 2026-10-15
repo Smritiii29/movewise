@@ -593,7 +593,7 @@ export default function ProfileForm({ user, onProfileSaved }) {
     return () => {
       active = false
     }
-  }, [user])
+  }, [user?.id])
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }))
     setError('')
