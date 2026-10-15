@@ -1426,8 +1426,16 @@ export default function JobOffers() {
   }
 
   useEffect(() => {
-    loadOffers()
-    loadReferenceData()
+    async function initialize() {
+      try {
+        await Promise.all([loadOffers(), loadReferenceData()])
+      } catch {
+        // Errors are captured within loadOffers and loadReferenceData
+      }
+    }
+
+    initialize()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function handleChange(event) {

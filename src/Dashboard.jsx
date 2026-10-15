@@ -758,6 +758,7 @@ import { ensureUserProfile } from './lib/profile'
 import ProfileForm from './components/ProfileForm'
 import JobOffers from './pages/JobOffers'
 import Analysis from './pages/Analysis'
+import ScenarioBuilder from './pages/ScenarioBuilder'
 
 import './App.css'
 
@@ -1425,6 +1426,8 @@ export default function Dashboard() {
               <JobOffers />
             ) : page === 'Analysis' ? (
               <Analysis />
+            ) : page === 'Scenarios' ? (
+              <ScenarioBuilder />
             ) : (
               <section className="subpage">
                 <p className="eyebrow">MOVEWISE WORKSPACE</p>
