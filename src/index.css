@@ -1,0 +1,64 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  font-family: 'Inter', sans-serif;
+  color: #16211F;
+  background: #FAF6EF;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+
+  --jade: #00998A;
+  --dark-jade: #00695C;
+  --light-jade: #4FBFAD;
+  --pale-jade: #E3F3F0;
+  --charcoal: #16211F;
+  --soft-charcoal: #445250;
+  --cream: #FAF6EF;
+  --sand: #EFE6D6;
+  --border: #E4DED0;
+  --coral: #D9704A;
+  --blue: #5D84A8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid var(--jade);
+  outline-offset: 3px;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -0.035em;
+}
+
+::selection {
+  background: var(--pale-jade);
+  color: var(--dark-jade);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
