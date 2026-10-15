@@ -230,6 +230,143 @@ app.delete('/api/offers/:id', authenticateUser, async (req, res) => {
   })
 })
 
+/* GET: Analyse the financial impact of a selected job offer. */
+app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
+  try {
+    const { offerId } = req.params
+
+    // Retrieve the signed-in user's current financial profile.
+    const { data: profile, error: profileError } = await req.supabase
+      .from('profiles')
+      .select('current_city, monthly_take_home, monthly_expenses, monthly_emi')
+      .eq('id', req.user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Fetch profile for analysis error:', profileError.message)
+      return res.status(500).json({
+        success: false,
+        message: 'Could not retrieve your financial profile.',
+      })
+    }
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Please complete your financial profile first.',
+      })
+    }
+
+    // Retrieve the selected offer, restricted to this user.
+    const { data: offer, error: offerError } = await req.supabase
+      .from('offers')
+      .select('*')
+      .eq('id', offerId)
+      .eq('user_id', req.user.id)
+      .maybeSingle()
+
+    if (offerError) {
+      console.error('Fetch offer for analysis error:', offerError.message)
+      return res.status(500).json({
+        success: false,
+        message: 'Could not retrieve the selected job offer.',
+      })
+    }
+
+    if (!offer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job offer not found.',
+      })
+    }
+
+    // Current monthly financial position.
+    const currentTakeHome = Number(profile.monthly_take_home || 0)
+    const currentExpenses = Number(profile.monthly_expenses || 0)
+    const currentEmi = Number(profile.monthly_emi || 0)
+
+    const currentMonthlySavings =
+      currentTakeHome - currentExpenses - currentEmi
+
+    // Estimated monthly expenses in the destination city.
+    const destinationExpenses =
+      Number(offer.monthly_rent || 0) +
+      Number(offer.monthly_food || 0) +
+      Number(offer.monthly_transport || 0) +
+      Number(offer.monthly_utilities || 0) +
+      Number(offer.monthly_other_expenses || 0)
+
+    const offerTakeHome = Number(offer.monthly_take_home || 0)
+    const offerEmi = Number(offer.monthly_emi || 0)
+
+    const projectedMonthlySavings =
+      offerTakeHome - destinationExpenses - offerEmi
+
+    const monthlySavingsDifference =
+      projectedMonthlySavings - currentMonthlySavings
+
+    const annualSavingsDifference = monthlySavingsDifference * 12
+
+    // Account for one-time relocation costs and offer benefits.
+    const netRelocationCost =
+      Number(offer.relocation_cost || 0) -
+      Number(offer.joining_bonus || 0) -
+      Number(offer.relocation_assistance || 0)
+
+    let breakEvenMonths = null
+    let breakEvenMessage
+
+    if (netRelocationCost <= 0) {
+      breakEvenMonths = 0
+      breakEvenMessage =
+        'The joining bonus and relocation assistance cover the estimated relocation cost.'
+    } else if (monthlySavingsDifference > 0) {
+      breakEvenMonths = netRelocationCost / monthlySavingsDifference
+      breakEvenMessage =
+        'Estimated months needed to recover relocation costs from additional monthly savings.'
+    } else {
+      breakEvenMessage =
+        'There is no savings-based break-even under these assumptions because monthly savings do not increase.'
+    }
+
+    res.json({
+      success: true,
+      profile: {
+        currentCity: profile.current_city,
+      },
+      offer: {
+        id: offer.id,
+        companyName: offer.company_name,
+        roleTitle: offer.role_title,
+        destinationCity: offer.destination_city,
+      },
+      analysis: {
+        currentTakeHome,
+        currentExpenses,
+        currentEmi,
+        currentMonthlySavings,
+        destinationExpenses,
+        offerTakeHome,
+        offerEmi,
+        projectedMonthlySavings,
+        monthlySavingsDifference,
+        annualSavingsDifference,
+        netRelocationCost,
+        breakEvenMonths,
+        breakEvenMessage,
+      },
+      note: 'These are estimates based on the financial information and expense assumptions currently saved in your profile and job offer.',
+    })
+  } catch (error) {
+    console.error('Analysis error:', error.message)
+    res.status(500).json({
+      success: false,
+      message: 'Could not calculate the relocation analysis.',
+    })
+  }
+})
+
+
 app.listen(PORT, () => {
   console.log(`MoveWise backend running at http://localhost:${PORT}`)
 })
