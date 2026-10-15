@@ -371,6 +371,169 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
 })
 
 
+/* POST: Recalculate the relocation analysis with caller-supplied overrides.
+ *
+ * All body fields are optional.  Any field that is not supplied falls back to
+ * the value saved in the database for that offer, so the response shape and
+ * the calculation formulas are identical to those of the GET endpoint. */
+app.post('/api/analysis/:offerId', authenticateUser, async (req, res) => {
+  try {
+    const { offerId } = req.params
+
+    // Retrieve the signed-in user's current financial profile.
+    const { data: profile, error: profileError } = await req.supabase
+      .from('profiles')
+      .select('current_city, monthly_take_home, monthly_expenses, monthly_emi')
+      .eq('id', req.user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error('Fetch profile for scenario error:', profileError.message)
+      return res.status(500).json({
+        success: false,
+        message: 'Could not retrieve your financial profile.',
+      })
+    }
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Please complete your financial profile first.',
+      })
+    }
+
+    // Retrieve the selected offer, restricted to this user.
+    const { data: offer, error: offerError } = await req.supabase
+      .from('offers')
+      .select('*')
+      .eq('id', offerId)
+      .eq('user_id', req.user.id)
+      .maybeSingle()
+
+    if (offerError) {
+      console.error('Fetch offer for scenario error:', offerError.message)
+      return res.status(500).json({
+        success: false,
+        message: 'Could not retrieve the selected job offer.',
+      })
+    }
+
+    if (!offer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job offer not found.',
+      })
+    }
+
+    // Validate every numeric override supplied in the request body.
+    const overrideKeys = [
+      'monthly_take_home',
+      'monthly_rent',
+      'monthly_food',
+      'monthly_transport',
+      'monthly_utilities',
+      'monthly_other_expenses',
+      'monthly_emi',
+      'relocation_cost',
+      'joining_bonus',
+      'relocation_assistance',
+    ]
+
+    for (const key of overrideKeys) {
+      const v = req.body[key]
+      if (v != null && (v === '' || !Number.isFinite(Number(v)) || Number(v) < 0)) {
+        return res.status(400).json({
+          success: false,
+          message: `${key} must be a non-negative number.`,
+        })
+      }
+    }
+
+    // Merge caller overrides on top of DB offer values.
+    function pick(key) {
+      return req.body[key] != null ? Number(req.body[key]) : Number(offer[key] || 0)
+    }
+
+    // Current monthly financial position (always from profile).
+    const currentTakeHome = Number(profile.monthly_take_home || 0)
+    const currentExpenses = Number(profile.monthly_expenses || 0)
+    const currentEmi      = Number(profile.monthly_emi || 0)
+
+    const currentMonthlySavings = currentTakeHome - currentExpenses - currentEmi
+
+    // Adjusted offer values (override > DB).
+    const offerTakeHome   = pick('monthly_take_home')
+    const offerEmi        = pick('monthly_emi')
+
+    const destinationExpenses =
+      pick('monthly_rent') +
+      pick('monthly_food') +
+      pick('monthly_transport') +
+      pick('monthly_utilities') +
+      pick('monthly_other_expenses')
+
+    const projectedMonthlySavings = offerTakeHome - destinationExpenses - offerEmi
+    const monthlySavingsDifference = projectedMonthlySavings - currentMonthlySavings
+    const annualSavingsDifference  = monthlySavingsDifference * 12
+
+    const netRelocationCost =
+      pick('relocation_cost') -
+      pick('joining_bonus') -
+      pick('relocation_assistance')
+
+    let breakEvenMonths = null
+    let breakEvenMessage
+
+    if (netRelocationCost <= 0) {
+      breakEvenMonths = 0
+      breakEvenMessage =
+        'The joining bonus and relocation assistance cover the estimated relocation cost.'
+    } else if (monthlySavingsDifference > 0) {
+      breakEvenMonths = netRelocationCost / monthlySavingsDifference
+      breakEvenMessage =
+        'Estimated months needed to recover relocation costs from additional monthly savings.'
+    } else {
+      breakEvenMessage =
+        'There is no savings-based break-even under these assumptions because monthly savings do not increase.'
+    }
+
+    res.json({
+      success: true,
+      profile: {
+        currentCity: profile.current_city,
+      },
+      offer: {
+        id: offer.id,
+        companyName: offer.company_name,
+        roleTitle: offer.role_title,
+        destinationCity: offer.destination_city,
+      },
+      analysis: {
+        currentTakeHome,
+        currentExpenses,
+        currentEmi,
+        currentMonthlySavings,
+        destinationExpenses,
+        offerTakeHome,
+        offerEmi,
+        projectedMonthlySavings,
+        monthlySavingsDifference,
+        annualSavingsDifference,
+        netRelocationCost,
+        breakEvenMonths,
+        breakEvenMessage,
+      },
+      note: 'These are scenario estimates based on the adjusted assumptions you have entered.',
+    })
+  } catch (error) {
+    console.error('Scenario analysis error:', error.message)
+    res.status(500).json({
+      success: false,
+      message: 'Could not calculate the scenario analysis.',
+    })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`MoveWise backend running at http://localhost:${PORT}`)
 })
