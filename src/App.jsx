@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import {
   BrowserRouter,
@@ -11,6 +12,7 @@ import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Dashboard from './Dashboard'
+import JobOffers from './pages/JobOffers'
 
 function ProtectedRoute() {
   const [session, setSession] = useState(null)
@@ -41,6 +43,7 @@ function ProtectedRoute() {
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (active) {
         setSession(nextSession)
+        setLoading(false)
       }
     })
 
@@ -58,6 +61,10 @@ function ProtectedRoute() {
     return <Navigate to="/" replace state={{ from: location }} />
   }
 
+  if (location.pathname === '/job-offers') {
+    return <JobOffers />
+  }
+
   return <Dashboard />
 }
 
@@ -68,6 +75,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/dashboard" element={<ProtectedRoute />} />
+      <Route path="/job-offers" element={<ProtectedRoute />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
