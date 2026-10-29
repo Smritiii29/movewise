@@ -23,11 +23,16 @@ import {
   ArrowRight,
   ArrowUpRight,
   BriefcaseBusiness,
+  CheckCircle2,
+  HelpCircle,
   LoaderCircle,
   PiggyBank,
   RotateCcw,
   SlidersHorizontal,
+  Target,
   Wallet,
+  XCircle,
+  Zap,
 } from 'lucide-react'
 import {
   Bar,
@@ -136,6 +141,10 @@ export default function ScenarioBuilder() {
 
   // Adjusted analysis result (from POST endpoint)
   const [adjusted, setAdjusted] = useState(null)
+
+  // Financial savings target
+  const [savingsTarget, setSavingsTarget] = useState('')
+  const [activePreset, setActivePreset] = useState(null)
 
   // UI states
   const [loadingOffers, setLoadingOffers] = useState(true)
@@ -259,6 +268,7 @@ export default function ScenarioBuilder() {
   function handleSliderChange(key, rawValue) {
     const numValue = Number(rawValue)
     const nextScenario = { ...scenario, [key]: numValue }
+    setActivePreset(null)
     setScenario(nextScenario)
     setInputText((prev) => ({ ...prev, [key]: String(numValue) }))
     setFieldErrors((prev) => ({ ...prev, [key]: '' }))
@@ -283,6 +293,7 @@ export default function ScenarioBuilder() {
     if (!isValidAmount(text)) return // leave error, don't recalculate
     const numValue = Math.max(0, Number(text))
     const nextScenario = { ...scenario, [key]: numValue }
+    setActivePreset(null)
     setScenario(nextScenario)
     setInputText((prev) => ({ ...prev, [key]: String(numValue) }))
     recalculate(nextScenario)
@@ -300,10 +311,41 @@ export default function ScenarioBuilder() {
   function resetToBaseline() {
     if (!selectedOffer) return
     const initial = offerToScenario(selectedOffer)
+    setActivePreset(null)
     setScenario(initial)
     setInputText(Object.fromEntries(Object.entries(initial).map(([k, v]) => [k, String(v)])))
     setFieldErrors({})
     setAdjusted(baseline)
+  }
+
+  // ── apply preset ──────────────────────────────────────────────────────────
+
+  function applyPreset(presetKey) {
+    if (!selectedOffer) return
+    const base = offerToScenario(selectedOffer)
+    let next = { ...base }
+
+    if (presetKey === 'rent_plus_20') {
+      next.monthly_rent = Math.round(base.monthly_rent * 1.2)
+    } else if (presetKey === 'increased_expenses') {
+      next.monthly_rent = Math.round(base.monthly_rent * 1.2)
+      next.monthly_food = Math.round(base.monthly_food * 1.25)
+      next.monthly_transport = Math.round(base.monthly_transport * 1.2)
+      next.monthly_utilities = Math.round(base.monthly_utilities * 1.15)
+      next.monthly_other_expenses = Math.round(base.monthly_other_expenses * 1.25)
+    } else if (presetKey === 'frugal_living') {
+      next.monthly_rent = Math.round(base.monthly_rent * 0.85)
+      next.monthly_food = Math.round(base.monthly_food * 0.8)
+      next.monthly_other_expenses = Math.round(base.monthly_other_expenses * 0.75)
+    } else if (presetKey === 'higher_relocation') {
+      next.relocation_cost = Math.round(base.relocation_cost * 1.5) || 50000
+    }
+
+    setActivePreset(presetKey)
+    setScenario(next)
+    setInputText(Object.fromEntries(Object.entries(next).map(([k, v]) => [k, String(v)])))
+    setFieldErrors({})
+    recalculate(next)
   }
 
   // ── computed display values ───────────────────────────────────────────────
@@ -441,6 +483,44 @@ export default function ScenarioBuilder() {
                   <RotateCcw size={15} />
                   Reset
                 </button>
+              </div>
+
+              {/* ── Scenario Presets ── */}
+              <div className="scenario-presets-card">
+                <div className="scenario-presets-header">
+                  <Zap size={16} />
+                  <span>Quick Presets</span>
+                </div>
+                <div className="scenario-presets-grid">
+                  <button
+                    type="button"
+                    className={`scenario-preset-pill ${activePreset === 'rent_plus_20' ? 'active' : ''}`}
+                    onClick={() => applyPreset('rent_plus_20')}
+                  >
+                    Rent +20%
+                  </button>
+                  <button
+                    type="button"
+                    className={`scenario-preset-pill ${activePreset === 'increased_expenses' ? 'active' : ''}`}
+                    onClick={() => applyPreset('increased_expenses')}
+                  >
+                    Higher Living Cost
+                  </button>
+                  <button
+                    type="button"
+                    className={`scenario-preset-pill ${activePreset === 'frugal_living' ? 'active' : ''}`}
+                    onClick={() => applyPreset('frugal_living')}
+                  >
+                    Frugal Budget
+                  </button>
+                  <button
+                    type="button"
+                    className={`scenario-preset-pill ${activePreset === 'higher_relocation' ? 'active' : ''}`}
+                    onClick={() => applyPreset('higher_relocation')}
+                  >
+                    Relocation +50%
+                  </button>
+                </div>
               </div>
 
               <div className="scenario-sliders">
@@ -592,6 +672,155 @@ export default function ScenarioBuilder() {
                       <span>Baseline offer</span>
                       <span className="scenario-legend-dot" style={{ background: '#00998A' }} />
                       <span>Scenario</span>
+                    </div>
+                  </div>
+
+                  {/* ── Financial Savings Target ── */}
+                  <div className="scenario-target-card">
+                    <div className="scenario-target-header">
+                      <div className="scenario-target-title">
+                        <Target size={18} />
+                        <div>
+                          <span className="eyebrow">GOAL TRACKING</span>
+                          <h3>Monthly Savings Target</h3>
+                        </div>
+                      </div>
+                      <div className="scenario-target-input-wrap">
+                        <span className="scenario-target-currency">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          placeholder="e.g. 50000"
+                          value={savingsTarget}
+                          onChange={(e) => setSavingsTarget(e.target.value)}
+                          className="scenario-target-input"
+                          aria-label="Financial monthly savings target"
+                        />
+                      </div>
+                    </div>
+                    {savingsTarget !== '' && Number(savingsTarget) > 0 ? (
+                      (() => {
+                        const targetNum = Number(savingsTarget)
+                        const scenarioSavings = adjValues.projectedMonthlySavings
+                        const targetDiff = scenarioSavings - targetNum
+                        const targetMet = targetDiff >= 0
+                        return (
+                          <div
+                            className={`scenario-target-status ${
+                              targetMet ? 'scenario-target-met' : 'scenario-target-unmet'
+                            }`}
+                          >
+                            <div className="scenario-target-status-icon">
+                              {targetMet ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+                            </div>
+                            <div className="scenario-target-status-text">
+                              <strong>
+                                {targetMet
+                                  ? `Target Achieved! (+${money(targetDiff)} above target)`
+                                  : `Target Missed by ${money(Math.abs(targetDiff))}`}
+                              </strong>
+                              <p>
+                                {targetMet
+                                  ? `Under this adjusted scenario, you project to save ${money(
+                                      scenarioSavings
+                                    )}/month, comfortably meeting your goal of ${money(targetNum)}/month.`
+                                  : `Your projected savings of ${money(
+                                      scenarioSavings
+                                    )}/month fall short of your ${money(
+                                      targetNum
+                                    )}/month goal. Consider trimming expenses or negotiating a higher take-home.`}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })()
+                    ) : (
+                      <p className="scenario-target-hint">
+                        Set an optional monthly savings goal to instantly verify whether this adjusted scenario satisfies your personal financial milestones.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* ── What Changed? Section ── */}
+                  <div className="scenario-what-changed-card">
+                    <div className="scenario-what-changed-header">
+                      <HelpCircle size={18} />
+                      <div>
+                        <span className="eyebrow">SCENARIO COMPARISON</span>
+                        <h3>What changed?</h3>
+                      </div>
+                    </div>
+                    <div className="scenario-what-changed-grid">
+                      <div className="scenario-what-changed-item">
+                        <span className="scenario-what-changed-label">Baseline Offer Savings</span>
+                        <strong className="scenario-what-changed-value">
+                          {money(baseValues.projectedMonthlySavings)}
+                        </strong>
+                        <small>From saved offer</small>
+                      </div>
+                      <div className="scenario-what-changed-item">
+                        <span className="scenario-what-changed-label">Scenario Savings</span>
+                        <strong className="scenario-what-changed-value">
+                          {money(adjValues.projectedMonthlySavings)}
+                        </strong>
+                        <small>With your adjustments</small>
+                      </div>
+                      <div
+                        className={`scenario-what-changed-item ${
+                          adjValues.projectedMonthlySavings - baseValues.projectedMonthlySavings > 0
+                            ? 'item-positive'
+                            : adjValues.projectedMonthlySavings - baseValues.projectedMonthlySavings < 0
+                            ? 'item-negative'
+                            : ''
+                        }`}
+                      >
+                        <span className="scenario-what-changed-label">Difference vs Baseline</span>
+                        <strong className="scenario-what-changed-value">
+                          {adjValues.projectedMonthlySavings - baseValues.projectedMonthlySavings > 0
+                            ? '+'
+                            : ''}
+                          {money(
+                            adjValues.projectedMonthlySavings - baseValues.projectedMonthlySavings
+                          )}
+                        </strong>
+                        <small>Monthly impact</small>
+                      </div>
+                    </div>
+
+                    <div className="scenario-what-changed-insight">
+                      {(() => {
+                        const scenarioDelta =
+                          adjValues.projectedMonthlySavings - baseValues.projectedMonthlySavings
+                        const currentDelta = adjValues.monthlySavingsDifference
+                        if (scenarioDelta > 0) {
+                          return (
+                            <p>
+                              Your scenario modifications increase your monthly savings by{' '}
+                              <strong>{money(scenarioDelta)}</strong> compared to the baseline offer.
+                              {currentDelta > 0
+                                ? ` You will save ${money(currentDelta)}/month more than your current city.`
+                                : ` However, overall monthly savings remain ${money(Math.abs(currentDelta))}/month lower than your current city.`}
+                            </p>
+                          )
+                        } else if (scenarioDelta < 0) {
+                          return (
+                            <p>
+                              Your scenario adjustments reduce your projected monthly savings by{' '}
+                              <strong>{money(Math.abs(scenarioDelta))}</strong> compared to the original offer.
+                              {currentDelta > 0
+                                ? ` You still gain ${money(currentDelta)}/month over your current city lifestyle.`
+                                : ` Under these assumptions, moving yields ${money(Math.abs(currentDelta))}/month less in savings than staying in your current city.`}
+                            </p>
+                          )
+                        } else {
+                          return (
+                            <p>
+                              Your scenario assumptions match the baseline job offer. Tweak any slider or pick a Quick Preset to simulate alternative outcomes.
+                            </p>
+                          )
+                        }
+                      })()}
                     </div>
                   </div>
 

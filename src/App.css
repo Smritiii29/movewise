@@ -2642,9 +2642,10 @@
 }
 
 .analysis-metric strong {
-  font-size: clamp(22px, 2vw, 30px);
+  font-size: clamp(20px, 1.8vw, 28px);
   letter-spacing: -0.8px;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .analysis-metric.metric-positive {
@@ -2682,7 +2683,7 @@
 
 .analysis-breakdown > div {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
@@ -2690,11 +2691,14 @@
 .analysis-breakdown span {
   color: var(--soft-charcoal);
   font-size: 14px;
+  flex: 1;
 }
 
 .analysis-breakdown strong {
   text-align: right;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .analysis-breakdown .analysis-breakdown-total {
@@ -2733,6 +2737,8 @@
 .analysis-annual strong {
   color: var(--dark-jade);
   font-size: 25px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .analysis-empty,
@@ -3235,15 +3241,16 @@
 }
 
 .scenario-number-input {
-  width: 112px;
+  width: 120px;
   flex-shrink: 0;
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: white;
   color: var(--charcoal);
-  font-size: 12px;
+  font-size: 13px;
   text-align: right;
+  font-variant-numeric: tabular-nums;
   transition: border-color 180ms, box-shadow 180ms;
 }
 
@@ -3402,7 +3409,279 @@
 
 @media (max-width: 480px) {
   .scenario-number-input {
-    width: 88px;
+    width: 95px;
   }
+}
 
+/* ── Scenario Presets ── */
+.scenario-presets-card {
+  margin-bottom: 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.scenario-presets-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--dark-jade);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.scenario-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scenario-preset-pill {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--cream);
+  color: var(--soft-charcoal);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: all 180ms ease;
+  white-space: nowrap;
+}
+
+.scenario-preset-pill:hover {
+  border-color: var(--jade);
+  background: var(--pale-jade);
+  color: var(--dark-jade);
+}
+
+.scenario-preset-pill.active {
+  border-color: var(--jade);
+  background: var(--jade);
+  color: #ffffff;
+}
+
+/* ── Goal Tracking (Savings Target) ── */
+.scenario-target-card {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.scenario-target-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.scenario-target-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scenario-target-title svg {
+  color: var(--jade);
+  flex-shrink: 0;
+}
+
+.scenario-target-title h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  letter-spacing: -0.4px;
+}
+
+.scenario-target-input-wrap {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--cream);
+  transition: border-color 180ms;
+}
+
+.scenario-target-input-wrap:focus-within {
+  border-color: var(--jade);
+  box-shadow: 0 0 0 3px rgba(0, 153, 138, 0.1);
+}
+
+.scenario-target-currency {
+  color: var(--soft-charcoal);
+  font-size: 14px;
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.scenario-target-input {
+  width: 130px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: var(--charcoal);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.scenario-target-hint {
+  margin: 14px 0 0;
+  color: var(--soft-charcoal);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.scenario-target-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+}
+
+.scenario-target-met {
+  border: 1px solid #b7ddd2;
+  background: #f4fbf8;
+  color: #17604b;
+}
+
+.scenario-target-met .scenario-target-status-icon {
+  color: var(--jade);
+}
+
+.scenario-target-unmet {
+  border: 1px solid #ebc9bd;
+  background: #fff8f5;
+  color: #923a23;
+}
+
+.scenario-target-unmet .scenario-target-status-icon {
+  color: var(--coral);
+}
+
+.scenario-target-status-text strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.scenario-target-status-text p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+/* ── What Changed? Card ── */
+.scenario-what-changed-card {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.scenario-what-changed-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.scenario-what-changed-header svg {
+  color: var(--jade);
+  flex-shrink: 0;
+}
+
+.scenario-what-changed-header h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+  letter-spacing: -0.4px;
+}
+
+.scenario-what-changed-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.scenario-what-changed-item {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--cream);
+}
+
+.scenario-what-changed-item.item-positive {
+  border-color: #b7ddd2;
+  background: #f4fbf8;
+}
+
+.scenario-what-changed-item.item-positive .scenario-what-changed-value {
+  color: var(--dark-jade);
+}
+
+.scenario-what-changed-item.item-negative {
+  border-color: #ebc9bd;
+  background: #fff8f5;
+}
+
+.scenario-what-changed-item.item-negative .scenario-what-changed-value {
+  color: var(--coral);
+}
+
+.scenario-what-changed-label {
+  color: var(--soft-charcoal);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.scenario-what-changed-value {
+  font-size: clamp(16px, 1.4vw, 20px);
+  color: var(--charcoal);
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.scenario-what-changed-item small {
+  color: #7b857e;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.scenario-what-changed-insight {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--pale-jade);
+  color: var(--dark-jade);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.scenario-what-changed-insight p {
+  margin: 0;
+}
+
+.scenario-what-changed-insight strong {
+  font-weight: 700;
+  color: var(--charcoal);
+}
+
+@media (max-width: 600px) {
+  .scenario-what-changed-grid {
+    grid-template-columns: 1fr;
+  }
 }
