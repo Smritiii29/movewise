@@ -758,6 +758,7 @@ import { ensureUserProfile } from './lib/profile'
 import ProfileForm from './components/ProfileForm'
 import JobOffers from './pages/JobOffers'
 import Analysis from './pages/Analysis'
+import CompareOffers from './pages/CompareOffers'
 import ScenarioBuilder from './pages/ScenarioBuilder'
 
 import './App.css'
@@ -767,6 +768,7 @@ const navigation = [
   { label: 'My Profile', icon: UserRound },
   { label: 'Job Offers', icon: BriefcaseBusiness },
   { label: 'Analysis', icon: ChartNoAxesCombined },
+  { label: 'Compare Offers', icon: Scale },
   { label: 'Scenarios', icon: SlidersHorizontal },
 ]
 
@@ -1426,6 +1428,8 @@ export default function Dashboard() {
               <JobOffers />
             ) : page === 'Analysis' ? (
               <Analysis />
+            ) : page === 'Compare Offers' ? (
+              <CompareOffers />
             ) : page === 'Scenarios' ? (
               <ScenarioBuilder />
             ) : (
