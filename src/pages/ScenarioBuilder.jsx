@@ -1,21 +1,3 @@
-// offerToScenario()	
-// isValidAmount()	
-// loadOffers()	
-// loadBaseline()	
-// recalculate()	
-// handleSliderChange()	
-// commitInput()	
-// resetToBaseline()
-
-
-// Current savings	= Current take-home − current expenses − current EMI
-// Destination expenses	= Rent + food + transport + utilities + other expenses
-// Projected savings = 	Offer take-home − destination expenses − offer EMI
-// Monthly savings difference	= Projected savings − current savings
-// Annual savings difference =	Monthly savings difference × 12
-// Net relocation cost =	Relocation cost − joining bonus − relocation assistance
-
-//Break-even months = {Net relocation cost}/{Monthly savings difference}
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
