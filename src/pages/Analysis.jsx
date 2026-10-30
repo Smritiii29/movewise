@@ -1,3 +1,4 @@
+
 // import { useEffect, useState } from 'react'
 // import {
 //   ArrowDownRight,
@@ -7,6 +8,7 @@
 //   ChartNoAxesCombined,
 //   CircleAlert,
 //   Lightbulb,
+//   Sparkles,
 //   LoaderCircle,
 //   PiggyBank,
 //   Wallet,
@@ -177,6 +179,10 @@
 //   const [loading, setLoading] = useState(true)
 //   const [analysing, setAnalysing] = useState(false)
 //   const [error, setError] = useState('')
+//   const [aiExplanation, setAiExplanation] = useState(null)
+//   const [aiLoading, setAiLoading] = useState(false)
+//   const [aiError, setAiError] = useState('')
+//   const [aiRetry, setAiRetry] = useState(0)
 
 //   useEffect(() => {
 //     let active = true
@@ -313,6 +319,65 @@
 //       active = false
 //     }
 //   }, [selectedId])
+
+//   // Gemini explains the backend's financial comparison; it does not replace
+//   // the existing rule-based recommendation or calculate financial values.
+//   useEffect(() => {
+//     let active = true
+
+//     async function loadAiExplanation() {
+//       setAiExplanation(null)
+//       setAiError('')
+
+//       if (!selectedId) {
+//         setAiLoading(false)
+//         return
+//       }
+
+//       setAiLoading(true)
+
+//       try {
+//         const { data, error: sessionError } =
+//           await supabase.auth.getSession()
+
+//         if (sessionError) throw sessionError
+
+//         const token = data.session?.access_token
+//         if (!token) throw new Error('Please sign in again.')
+
+//         const response = await fetch(
+//           `${API_URL}/ai-explanation/${selectedId}`,
+//           {
+//             headers: { Authorization: `Bearer ${token}` },
+//           },
+//         )
+
+//         const result = await response.json()
+
+//         if (!response.ok) {
+//           throw new Error(
+//             result.error || result.message || 'Could not generate the AI explanation.',
+//           )
+//         }
+
+//         if (active) setAiExplanation(result.explanation)
+//       } catch (err) {
+//         if (active) {
+//           setAiError(
+//             err.message || 'The AI explanation is unavailable right now.',
+//           )
+//         }
+//       } finally {
+//         if (active) setAiLoading(false)
+//       }
+//     }
+
+//     loadAiExplanation()
+
+//     return () => {
+//       active = false
+//     }
+//   }, [selectedId, aiRetry])
 
 //   const values = analysis?.analysis
 //   const savingsImproved = Number(values?.monthlySavingsDifference) > 0
@@ -567,6 +632,80 @@
 //             </p>
 //           </section>
 
+//           <section className="analysis-panel ai-explanation-panel">
+//             <div className="ai-explanation-heading">
+//               <span className="analysis-metric-icon">
+//                 <Sparkles size={21} />
+//               </span>
+//               <div>
+//                 <span className="eyebrow">AI-POWERED INSIGHT</span>
+//                 <h2>A closer look at your move</h2>
+//               </div>
+//             </div>
+
+//             <p className="analysis-panel-description">
+//               A plain-language explanation of your financial trade-offs and
+//               personal priorities. Use it as guidance, not as a final decision.
+//             </p>
+
+//             {aiLoading && (
+//               <div className="ai-explanation-status" role="status">
+//                 <LoaderCircle size={21} className="analysis-spinner" />
+//                 <span>Gemini is reviewing your comparison...</span>
+//               </div>
+//             )}
+
+//             {!aiLoading && aiError && (
+//               <div className="offers-alert offers-error ai-explanation-error" role="alert">
+//                 <p>{aiError}</p>
+//                 <button
+//                   type="button"
+//                   className="ai-retry-button"
+//                   onClick={() => setAiRetry((count) => count + 1)}
+//                 >
+//                   Try again
+//                 </button>
+//               </div>
+//             )}
+
+//             {!aiLoading && !aiError && aiExplanation && (
+//               <div className="ai-explanation-content">
+//                 <p className="ai-explanation-summary">
+//                   {aiExplanation.summary}
+//                 </p>
+
+//                 {Array.isArray(aiExplanation.keyConsiderations) &&
+//                   aiExplanation.keyConsiderations.length > 0 && (
+//                     <div className="ai-explanation-list">
+//                       <h3>Key considerations</h3>
+//                       <ul>
+//                         {aiExplanation.keyConsiderations.map((item, index) => (
+//                           <li key={`${index}-${item}`}>{item}</li>
+//                         ))}
+//                       </ul>
+//                     </div>
+//                   )}
+
+//                 {Array.isArray(aiExplanation.questionsToAsk) &&
+//                   aiExplanation.questionsToAsk.length > 0 && (
+//                     <div className="ai-explanation-list">
+//                       <h3>Questions to consider</h3>
+//                       <ul>
+//                         {aiExplanation.questionsToAsk.map((item, index) => (
+//                           <li key={`${index}-${item}`}>{item}</li>
+//                         ))}
+//                       </ul>
+//                     </div>
+//                   )}
+
+//                 <p className="ai-explanation-disclaimer">
+//                   AI-generated guidance may be imperfect. Verify offer details
+//                   and cost estimates before making a relocation decision.
+//                 </p>
+//               </div>
+//             )}
+//           </section>
+
 //           <section className="analysis-panel analysis-chart-panel">
 //             <span className="eyebrow">SAVINGS COMPARISON</span>
 //             <h2>How your monthly savings could change</h2>
@@ -689,11 +828,13 @@
 //                 <div className="analysis-breakdown-total">
 //                   <span>Estimated break-even</span>
 //                   <strong>
-//                     {values.breakEvenMonths == null
-//                       ? 'Not reached'
-//                       : values.breakEvenMonths === 0
-//                         ? 'Already covered'
-//                         : `${values.breakEvenMonths.toFixed(1)} months`}
+//                     {values.sameCity
+//   ? 'Not applicable'
+//   : values.breakEvenMonths == null
+//     ? 'Not reached'
+//     : values.breakEvenMonths === 0
+//       ? 'Immediate'
+//       : `${values.breakEvenMonths.toFixed(1)} months`}
 //                   </strong>
 //                 </div>
 //               </div>
@@ -757,6 +898,65 @@ const money = (value) =>
 
 
 function getRecommendation(values, preferences) {
+  if (values.analysisType === 'graduate_first_job') {
+    const fundingGap = Number(values.relocationFundingGap || 0)
+    const confidence = preferences?.relocation_confidence
+    const adaptability = preferences?.willingness_to_adapt
+    const concerns = Array.isArray(preferences?.concerns)
+      ? preferences.concerns
+      : []
+    const personalNotes = []
+
+    if (fundingGap > 0) {
+      personalNotes.push(
+        'Your available relocation funds do not fully cover the estimated upfront cost. Confirm how you would cover the shortfall before committing.',
+      )
+    } else {
+      personalNotes.push(
+        'Your stated relocation funds cover the estimated net upfront relocation cost. Keep a buffer for deposits and unexpected expenses.',
+      )
+    }
+
+    if (Number(confidence) > 0 && Number(confidence) <= 2) {
+      personalNotes.push(
+        'Your relocation confidence is low. Consider what practical support would help you feel prepared for the move.',
+      )
+    }
+
+    if (Number(adaptability) > 0 && Number(adaptability) <= 2) {
+      personalNotes.push(
+        'You reported lower willingness to adapt to a new city. Research accommodation, commute, and support options before deciding.',
+      )
+    }
+
+    if (concerns.length) {
+      personalNotes.push(
+        `You identified these concerns: ${concerns.join(', ')}. Consider how you would address them before relocating.`,
+      )
+    }
+
+    if (!preferences) {
+      personalNotes.push(
+        'Your personal preferences could not be loaded. Review your profile to include them in this assessment.',
+      )
+    }
+
+    return {
+      type: fundingGap > 0 ? 'negative' : 'mixed',
+      title:
+        fundingGap > 0
+          ? 'Check your upfront relocation budget'
+          : 'Review affordability and career fit',
+      summary:
+        fundingGap > 0
+          ? 'This offer may provide a path to your first role, but your stated relocation funds fall short of the estimated upfront cost. Confirm a realistic plan for the gap before accepting.'
+          : 'Review the projected monthly savings after joining alongside the upfront moving cost, role fit, and personal priorities. This assessment does not compare the offer against a current salary.',
+      personalNotes,
+      confidence,
+      adaptability,
+    }
+  }
+
   const difference = Number(values.monthlySavingsDifference || 0)
   const netCost = Number(values.netRelocationCost || 0)
 
@@ -1102,17 +1302,26 @@ export default function Analysis() {
   const savingsImproved = Number(values?.monthlySavingsDifference) > 0
   const savingsUnchanged = Number(values?.monthlySavingsDifference) === 0
 
+  const isGraduate = analysis?.profile?.careerStage === 'recent_graduate'
+
   const chartData = values
-    ? [
-        {
-          name: 'Current',
-          savings: Number(values.currentMonthlySavings || 0),
-        },
-        {
-          name: 'With offer',
-          savings: Number(values.projectedMonthlySavings || 0),
-        },
-      ]
+    ? isGraduate
+      ? [
+          {
+            name: 'After joining',
+            savings: Number(values.projectedMonthlySavings || 0),
+          },
+        ]
+      : [
+          {
+            name: 'Current',
+            savings: Number(values.currentMonthlySavings || 0),
+          },
+          {
+            name: 'With offer',
+            savings: Number(values.projectedMonthlySavings || 0),
+          },
+        ]
     : []
 
   const recommendation = values
@@ -1207,10 +1416,20 @@ export default function Analysis() {
                 <Wallet size={21} />
               </span>
               <span className="analysis-metric-label">
-                Current monthly savings
+                {isGraduate ? 'Available relocation funds' : 'Current monthly savings'}
               </span>
-              <strong>{money(values.currentMonthlySavings)}</strong>
-              <small>Based on your saved profile</small>
+              <strong>
+                {money(
+                  isGraduate
+                    ? values.availableRelocationFunds
+                    : values.currentMonthlySavings,
+                )}
+              </strong>
+              <small>
+                {isGraduate
+                  ? 'Your stated moving budget, or current savings if no budget was entered'
+                  : 'Based on your saved profile'}
+              </small>
             </article>
 
             <article className="analysis-metric">
@@ -1242,20 +1461,25 @@ export default function Analysis() {
               </span>
 
               <span className="analysis-metric-label">
-                Monthly savings change
+                {isGraduate ? 'Upfront relocation funding gap' : 'Monthly savings change'}
               </span>
 
               <strong>
-                {Number(values.monthlySavingsDifference) > 0 ? '+' : ''}
-                {money(values.monthlySavingsDifference)}
+                {isGraduate
+                  ? money(values.relocationFundingGap)
+                  : `${Number(values.monthlySavingsDifference) > 0 ? '+' : ''}${money(values.monthlySavingsDifference)}`}
               </strong>
 
               <small>
-                {savingsImproved
-                  ? 'Projected improvement'
-                  : savingsUnchanged
-                    ? 'No projected change'
-                    : 'Projected decrease'}
+                {isGraduate
+                  ? values.relocationFundingGap > 0
+                    ? 'Estimated amount not covered by your stated relocation funds'
+                    : 'Your stated funds cover the estimated net upfront cost'
+                  : savingsImproved
+                    ? 'Projected improvement'
+                    : savingsUnchanged
+                      ? 'No projected change'
+                      : 'Projected decrease'}
               </small>
             </article>
           </section>
@@ -1285,18 +1509,36 @@ export default function Analysis() {
             </p>
 
             <div className="recommendation-reasons">
-              <div>
-                <span>Monthly savings change</span>
-                <strong>
-                  {Number(values.monthlySavingsDifference) > 0 ? '+' : ''}
-                  {money(values.monthlySavingsDifference)}
-                </strong>
-              </div>
-
-              <div>
-                <span>Annual savings change</span>
-                <strong>{money(values.annualSavingsDifference)}</strong>
-              </div>
+              {isGraduate ? (
+                <>
+                  <div>
+                    <span>Projected annual savings after joining</span>
+                    <strong>{money(values.annualProjectedSavings)}</strong>
+                  </div>
+                  <div>
+                    <span>Available relocation funds</span>
+                    <strong>{money(values.availableRelocationFunds)}</strong>
+                  </div>
+                  <div>
+                    <span>Upfront funding gap</span>
+                    <strong>{money(values.relocationFundingGap)}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <span>Monthly savings change</span>
+                    <strong>
+                      {Number(values.monthlySavingsDifference) > 0 ? '+' : ''}
+                      {money(values.monthlySavingsDifference)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Annual savings change</span>
+                    <strong>{money(values.annualSavingsDifference)}</strong>
+                  </div>
+                </>
+              )}
 
               <div>
                 <span>
@@ -1426,12 +1668,19 @@ export default function Analysis() {
           </section>
 
           <section className="analysis-panel analysis-chart-panel">
-            <span className="eyebrow">SAVINGS COMPARISON</span>
-            <h2>How your monthly savings could change</h2>
+            <span className="eyebrow">
+              {isGraduate ? 'PROJECTED SAVINGS' : 'SAVINGS COMPARISON'}
+            </span>
+            <h2>
+              {isGraduate
+                ? 'Estimated monthly savings after joining'
+                : 'How your monthly savings could change'}
+            </h2>
 
             <p className="analysis-panel-description">
-              Compare the money left over each month in your current situation
-              and with the selected offer.
+              {isGraduate
+                ? 'This estimate shows what may remain each month after the offer income, destination living costs, and offer EMI.'
+                : 'Compare the money left over each month in your current situation and with the selected offer.'}
             </p>
 
             <div className="analysis-chart">
@@ -1481,26 +1730,53 @@ export default function Analysis() {
 
           <section className="analysis-detail-grid">
             <article className="analysis-panel">
-              <span className="eyebrow">MONTHLY BREAKDOWN</span>
-              <h2>Where your money goes</h2>
+              <span className="eyebrow">
+                {isGraduate ? 'FIRST-JOB BUDGET' : 'MONTHLY BREAKDOWN'}
+              </span>
+              <h2>
+                {isGraduate ? 'Moving funds and monthly budget' : 'Where your money goes'}
+              </h2>
 
               <div className="analysis-breakdown">
-                <div>
-                  <span>Current take-home</span>
-                  <strong>{money(values.currentTakeHome)}</strong>
-                </div>
-                <div>
-                  <span>Current expenses</span>
-                  <strong>− {money(values.currentExpenses)}</strong>
-                </div>
-                <div>
-                  <span>Current EMI</span>
-                  <strong>− {money(values.currentEmi)}</strong>
-                </div>
-                <div className="analysis-breakdown-total">
-                  <span>Current monthly savings</span>
-                  <strong>{money(values.currentMonthlySavings)}</strong>
-                </div>
+                {isGraduate ? (
+                  <>
+                    <div>
+                      <span>Available relocation funds</span>
+                      <strong>{money(values.availableRelocationFunds)}</strong>
+                    </div>
+                    <div>
+                      <span>Estimated net upfront relocation cost</span>
+                      <strong>{money(values.remainingUpfrontCost)}</strong>
+                    </div>
+                    <div>
+                      <span>Family financial support (monthly, reported)</span>
+                      <strong>{money(values.familyFinancialSupport)}</strong>
+                    </div>
+                    <div className="analysis-breakdown-total">
+                      <span>Upfront funding gap</span>
+                      <strong>{money(values.relocationFundingGap)}</strong>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <span>Current take-home</span>
+                      <strong>{money(values.currentTakeHome)}</strong>
+                    </div>
+                    <div>
+                      <span>Current expenses</span>
+                      <strong>− {money(values.currentExpenses)}</strong>
+                    </div>
+                    <div>
+                      <span>Current EMI</span>
+                      <strong>− {money(values.currentEmi)}</strong>
+                    </div>
+                    <div className="analysis-breakdown-total">
+                      <span>Current monthly savings</span>
+                      <strong>{money(values.currentMonthlySavings)}</strong>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="analysis-breakdown">

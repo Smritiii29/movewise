@@ -760,6 +760,7 @@ import JobOffers from './pages/JobOffers'
 import Analysis from './pages/Analysis'
 import CompareOffers from './pages/CompareOffers'
 import ScenarioBuilder from './pages/ScenarioBuilder'
+import RelocationHub from './pages/RelocationHub'
 
 import './App.css'
 
@@ -770,8 +771,8 @@ const navigation = [
   { label: 'Analysis', icon: ChartNoAxesCombined },
   { label: 'Compare Offers', icon: Scale },
   { label: 'Scenarios', icon: SlidersHorizontal },
+  { label: 'Relocation Hub', icon: MapPin },
 ]
-
 const features = [
   {
     icon: Scale,
@@ -1432,6 +1433,8 @@ export default function Dashboard() {
               <CompareOffers />
             ) : page === 'Scenarios' ? (
               <ScenarioBuilder />
+            ) : page === 'Relocation Hub' ? (
+              <RelocationHub />
             ) : (
               <section className="subpage">
                 <p className="eyebrow">MOVEWISE WORKSPACE</p>

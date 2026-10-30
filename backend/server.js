@@ -51,6 +51,72 @@ const OPTIONAL_NUMBER_FIELDS = OFFER_FIELDS.filter(
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+  
+function normalizeCity(city) {
+  return typeof city === 'string'
+    ? city.trim().replace(/\s+/g, ' ').toLowerCase()
+    : ''
+}
+
+function calculateRelocationCosts(profileCity, destinationCity, offer) {
+  const current = normalizeCity(profileCity)
+  const destination = normalizeCity(destinationCity)
+
+  // Do not assume relocation is unnecessary when either city is unknown.
+  const sameCity = Boolean(current && destination && current === destination)
+
+  // Moving costs apply only when the city changes.
+  const relocationCost = sameCity
+    ? 0
+    : Number(offer.relocation_cost || 0)
+
+  // A same-city move has no city-level relocation cost or break-even period.
+  if (sameCity) {
+    return {
+      sameCity: true,
+      relocationCost: 0,
+      netRelocationCost: 0,
+      breakEvenMonths: null,
+      breakEvenMessage:
+        'Your current and destination cities are the same, so city-level relocation costs and break-even are not applicable.',
+    }
+  }
+
+  const joiningBonus = Number(offer.joining_bonus || 0)
+  const relocationAssistance = Number(offer.relocation_assistance || 0)
+
+  const netRelocationCost =
+    relocationCost - joiningBonus - relocationAssistance
+
+  let breakEvenMonths = null
+  let breakEvenMessage
+
+  if (netRelocationCost < 0) {
+    breakEvenMonths = 0
+    breakEvenMessage =
+      'The joining bonus and relocation assistance exceed the estimated relocation cost.'
+  } else if (netRelocationCost === 0) {
+    breakEvenMonths = 0
+    breakEvenMessage =
+      'The joining bonus and relocation assistance exactly cover the estimated relocation cost.'
+  } else {
+    breakEvenMessage =
+      'There is no savings-based break-even under these assumptions because monthly savings do not increase.'
+
+    // The caller can calculate a savings-based break-even when monthly
+    // savings improve.
+  }
+
+  return {
+    sameCity: false,
+    relocationCost,
+    netRelocationCost,
+    breakEvenMonths,
+    breakEvenMessage,
+  }
+}
+
+
 function validateAndBuildOffer(body, userId, { partial = false } = {}) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { error: 'Request body must be a JSON object.' }
@@ -312,6 +378,8 @@ app.delete('/api/offers/:id', authenticateUser, async (req, res) => {
 })
 
 // GET: Analyse the financial impact of a selected job offer.
+
+/* GET: Analyse the financial impact of a selected job offer. */
 app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
   try {
     const { offerId } = req.params
@@ -323,18 +391,27 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
       })
     }
 
-    // Retrieve the signed-in user's current financial profile.
+    // 1. Retrieve the user's profile, including both career-stage fields.
     const { data: profile, error: profileError } = await req.supabase
       .from('profiles')
-      .select(
-        'current_city, monthly_take_home, monthly_expenses, monthly_emi',
-      )
+      .select(`
+        career_stage,
+        current_city,
+        monthly_take_home,
+        monthly_expenses,
+        monthly_emi,
+        current_savings,
+        expected_monthly_salary,
+        available_relocation_budget,
+        family_financial_support,
+        target_role,
+        preferred_cities
+      `)
       .eq('id', req.user.id)
       .maybeSingle()
 
     if (profileError) {
-      console.error('Fetch profile for analysis error:', profileError.message)
-
+      console.error('Fetch profile error:', profileError.message)
       return res.status(500).json({
         success: false,
         message: 'Could not retrieve your financial profile.',
@@ -348,7 +425,7 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
       })
     }
 
-    // Retrieve the selected offer, restricted to this user.
+    // 2. Retrieve only an offer owned by the signed-in user.
     const { data: offer, error: offerError } = await req.supabase
       .from('offers')
       .select('*')
@@ -357,8 +434,7 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
       .maybeSingle()
 
     if (offerError) {
-      console.error('Fetch offer for analysis error:', offerError.message)
-
+      console.error('Fetch offer error:', offerError.message)
       return res.status(500).json({
         success: false,
         message: 'Could not retrieve the selected job offer.',
@@ -372,7 +448,9 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
       })
     }
 
-    // Current monthly financial position.
+    const isGraduate = profile.career_stage === 'recent_graduate'
+
+    // 3. Calculate monthly expenses and projected savings after joining.
     const currentTakeHome = Number(profile.monthly_take_home || 0)
     const currentExpenses = Number(profile.monthly_expenses || 0)
     const currentEmi = Number(profile.monthly_emi || 0)
@@ -380,7 +458,6 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
     const currentMonthlySavings =
       currentTakeHome - currentExpenses - currentEmi
 
-    // Estimated monthly expenses in the destination city.
     const destinationExpenses =
       Number(offer.monthly_rent || 0) +
       Number(offer.monthly_food || 0) +
@@ -394,47 +471,110 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
     const projectedMonthlySavings =
       offerTakeHome - destinationExpenses - offerEmi
 
-    const monthlySavingsDifference =
-      projectedMonthlySavings - currentMonthlySavings
+    // 4. Preserve the existing net relocation cost calculation.
+    // This helper accounts for the existing relocation-cost rules,
+    // including benefits such as joining bonuses/relocation assistance.
+    const relocation = calculateRelocationCosts(
+      profile.current_city,
+      offer.destination_city,
+      offer,
+    )
 
-    const annualSavingsDifference = monthlySavingsDifference * 12
+    const {
+      sameCity,
+      relocationCost,
+      netRelocationCost,
+    } = relocation
 
-    // Positive = remaining cost; negative = benefits exceed costs.
-    const netRelocationCost =
-      Number(offer.relocation_cost || 0) -
-      Number(offer.joining_bonus || 0) -
-      Number(offer.relocation_assistance || 0)
+    // 5. Build career-stage-specific analysis.
+    let analysis
 
-    let breakEvenMonths = null
-    let breakEvenMessage = ''
+    if (isGraduate) {
+      // Prefer the explicit moving budget. Fall back to current savings
+      // only when no moving budget was entered.
+      const availableRelocationFunds =
+        profile.available_relocation_budget != null
+          ? Number(profile.available_relocation_budget)
+          : Number(profile.current_savings || 0)
 
-    if (netRelocationCost <= 0) {
-      breakEvenMonths = 0
-      breakEvenMessage =
-        netRelocationCost < 0
-          ? 'The joining bonus and relocation assistance exceed the estimated relocation cost.'
-          : 'The joining bonus and relocation assistance exactly cover the estimated relocation cost.'
-    } else if (monthlySavingsDifference > 0) {
-      breakEvenMonths = netRelocationCost / monthlySavingsDifference
-      breakEvenMessage =
-        'Estimated months needed to recover the remaining relocation cost from additional monthly savings.'
+      // Never treat a negative net relocation cost as a funding need.
+      const remainingUpfrontCost = Math.max(0, netRelocationCost)
+
+      const relocationFundingGap = Math.max(
+        0,
+        remainingUpfrontCost - availableRelocationFunds,
+      )
+
+      analysis = {
+        analysisType: 'graduate_first_job',
+
+        // Keep shared fields present for compatibility, but do not
+        // present a graduate's lack of current salary as a comparison.
+        currentTakeHome: null,
+        currentExpenses,
+        currentEmi: null,
+        currentMonthlySavings: null,
+
+        destinationExpenses,
+        offerTakeHome,
+        offerEmi,
+        projectedMonthlySavings,
+        annualProjectedSavings: projectedMonthlySavings * 12,
+
+        // Preserve the original relocation-cost outputs.
+        sameCity,
+        relocationCost,
+        netRelocationCost,
+        breakEvenMonths: null,
+        breakEvenMessage:
+          'For a first job, compare the net upfront relocation cost with your available moving funds.',
+
+        // Graduate-specific outputs.
+        availableRelocationFunds,
+        remainingUpfrontCost,
+        relocationFundingGap,
+        expectedMonthlySalary:
+          profile.expected_monthly_salary == null
+            ? null
+            : Number(profile.expected_monthly_salary),
+        familyFinancialSupport:
+          Number(profile.family_financial_support || 0),
+        targetRole: profile.target_role || offer.role_title,
+        preferredCities: profile.preferred_cities || [],
+      }
     } else {
-      breakEvenMessage =
-        'There is no savings-based break-even under these assumptions because monthly savings do not increase.'
-    }
+      // Working-professional calculations remain current vs new job.
+      const monthlySavingsDifference =
+        projectedMonthlySavings - currentMonthlySavings
 
-    res.json({
-      success: true,
-      profile: {
-        currentCity: profile.current_city,
-      },
-      offer: {
-        id: offer.id,
-        companyName: offer.company_name,
-        roleTitle: offer.role_title,
-        destinationCity: offer.destination_city,
-      },
-      analysis: {
+      const annualSavingsDifference = monthlySavingsDifference * 12
+
+      let breakEvenMonths = relocation.breakEvenMonths
+      let breakEvenMessage = relocation.breakEvenMessage
+
+      // Use NET relocation cost, after benefits, for break-even.
+      if (
+        !sameCity &&
+        netRelocationCost > 0 &&
+        monthlySavingsDifference > 0
+      ) {
+        breakEvenMonths =
+          netRelocationCost / monthlySavingsDifference
+
+        breakEvenMessage =
+          'Estimated months needed to recover the net relocation cost from additional monthly savings.'
+      } else if (
+        !sameCity &&
+        netRelocationCost > 0 &&
+        monthlySavingsDifference <= 0
+      ) {
+        breakEvenMonths = null
+        breakEvenMessage =
+          'The offer does not currently increase projected monthly savings, so a savings-based relocation payback period cannot be estimated.'
+      }
+
+      analysis = {
+        analysisType: 'working_professional',
         currentTakeHome,
         currentExpenses,
         currentEmi,
@@ -445,21 +585,43 @@ app.get('/api/analysis/:offerId', authenticateUser, async (req, res) => {
         projectedMonthlySavings,
         monthlySavingsDifference,
         annualSavingsDifference,
+        annualProjectedSavings: projectedMonthlySavings * 12,
+        sameCity,
+        relocationCost,
         netRelocationCost,
         breakEvenMonths,
         breakEvenMessage,
+      }
+    }
+
+    return res.json({
+      success: true,
+      profile: {
+        careerStage: profile.career_stage || 'working_professional',
+        currentCity: profile.current_city,
       },
-      note: 'These are estimates based on the financial information and expense assumptions currently saved in your profile and job offer.',
+      offer: {
+        id: offer.id,
+        companyName: offer.company_name,
+        roleTitle: offer.role_title,
+        destinationCity: offer.destination_city,
+      },
+      analysis,
+      note: isGraduate
+        ? 'First-job estimates use the selected offer and stated relocation funds. Family financial support is shown separately and is not automatically added to the moving budget or projected monthly savings.'
+        : 'Estimates are based on your saved financial profile, selected offer, and net relocation cost after applicable benefits.',
     })
   } catch (error) {
     console.error('Analysis error:', error.message)
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Could not calculate the relocation analysis.',
     })
   }
 })
+
+
 app.get(
   '/api/ai-explanation/:offerId',
   authenticateUser,
@@ -471,54 +633,76 @@ app.get(
         })
       }
 
-      const userId = req.user.id
       const { offerId } = req.params
 
-      // Fetch the signed-in user's financial profile.
+      if (!UUID_REGEX.test(offerId)) {
+        return res.status(400).json({
+          error: 'Invalid job offer ID.',
+        })
+      }
+
+      // Retrieve the user's profile and role-specific preferences.
       const { data: profile, error: profileError } =
         await req.supabase
           .from('profiles')
           .select(`
+            career_stage,
             current_city,
             monthly_take_home,
             monthly_expenses,
             monthly_emi,
             current_savings,
+            expected_monthly_salary,
+            available_relocation_budget,
+            family_financial_support,
+            target_role,
+            preferred_cities,
             relocation_confidence,
             willingness_to_adapt,
             concerns,
             priorities
           `)
-          .eq('id', userId)
-          .single()
+          .eq('id', req.user.id)
+          .maybeSingle()
 
-      if (profileError || !profile) {
+      if (profileError) {
+        console.error('AI profile fetch error:', profileError.message)
+        return res.status(500).json({
+          error: 'Could not retrieve your financial profile.',
+        })
+      }
+
+      if (!profile) {
         return res.status(404).json({
           error: 'Your financial profile could not be found.',
         })
       }
 
-      // Fetch only an offer belonging to this user.
+      // Retrieve only an offer belonging to the signed-in user.
       const { data: offer, error: offerError } =
         await req.supabase
           .from('offers')
           .select('*')
           .eq('id', offerId)
-          .eq('user_id', userId)
-          .single()
+          .eq('user_id', req.user.id)
+          .maybeSingle()
 
-      if (offerError || !offer) {
+      if (offerError) {
+        console.error('AI offer fetch error:', offerError.message)
+        return res.status(500).json({
+          error: 'Could not retrieve the selected job offer.',
+        })
+      }
+
+      if (!offer) {
         return res.status(404).json({
           error: 'Job offer not found.',
         })
       }
 
-      // Calculate the financial figures in the backend.
-      const currentSavings =
-        Number(profile.monthly_take_home || 0) -
-        Number(profile.monthly_expenses || 0) -
-        Number(profile.monthly_emi || 0)
+      const isGraduate = profile.career_stage === 'recent_graduate'
 
+      // Calculate the offer's monthly financial position.
       const destinationExpenses =
         Number(offer.monthly_rent || 0) +
         Number(offer.monthly_food || 0) +
@@ -526,62 +710,172 @@ app.get(
         Number(offer.monthly_utilities || 0) +
         Number(offer.monthly_other_expenses || 0)
 
-      const projectedSavings =
-        Number(offer.monthly_take_home || 0) -
-        destinationExpenses -
-        Number(offer.monthly_emi || 0)
+      const offerTakeHome = Number(offer.monthly_take_home || 0)
+      const offerEmi = Number(offer.monthly_emi || 0)
 
-      const monthlySavingsDifference =
-        projectedSavings - currentSavings
+      const projectedMonthlySavings =
+        offerTakeHome - destinationExpenses - offerEmi
 
-      const netRelocationCost =
-        Number(offer.relocation_cost || 0) -
-        Number(offer.joining_bonus || 0) -
-        Number(offer.relocation_assistance || 0)
+      // IMPORTANT: use the same net relocation-cost helper as the
+      // financial analysis endpoint. Do not recalculate gross costs here.
+      const relocation = calculateRelocationCosts(
+        profile.current_city,
+        offer.destination_city,
+        offer,
+      )
 
-      const financialSummary = {
-        currentCity: profile.current_city || 'Not provided',
-        destinationCity: offer.destination_city,
-        company: offer.company_name,
-        role: offer.role_title,
-        currentMonthlySavings: currentSavings,
-        projectedMonthlySavings: projectedSavings,
-        monthlySavingsDifference,
-        annualSavingsDifference: monthlySavingsDifference * 12,
-        destinationMonthlyExpenses: destinationExpenses,
-        netRelocationCost,
-        relocationConfidence: profile.relocation_confidence,
-        willingnessToAdapt: profile.willingness_to_adapt,
-        concerns: profile.concerns || [],
-        priorities: profile.priorities || {},
+      let financialSummary
+
+      if (isGraduate) {
+        const availableRelocationFunds =
+          profile.available_relocation_budget != null
+            ? Number(profile.available_relocation_budget)
+            : Number(profile.current_savings || 0)
+
+        const remainingUpfrontCost = Math.max(
+          0,
+          relocation.netRelocationCost,
+        )
+
+        const relocationFundingGap = Math.max(
+          0,
+          remainingUpfrontCost - availableRelocationFunds,
+        )
+
+        financialSummary = {
+          careerStage: 'recent_graduate',
+          currentCity: profile.current_city || 'Not provided',
+          destinationCity: offer.destination_city,
+          company: offer.company_name,
+          offeredRole: offer.role_title,
+          targetRole: profile.target_role || offer.role_title,
+          expectedMonthlySalary:
+            profile.expected_monthly_salary == null
+              ? null
+              : Number(profile.expected_monthly_salary),
+          offeredMonthlyTakeHome: offerTakeHome,
+          destinationMonthlyExpenses: destinationExpenses,
+          projectedMonthlySavings,
+          annualProjectedSavings: projectedMonthlySavings * 12,
+          availableRelocationFunds,
+          grossRelocationCost: relocation.relocationCost,
+          netRelocationCost: relocation.netRelocationCost,
+          remainingUpfrontCost,
+          relocationFundingGap,
+          familyFinancialSupport:
+            Number(profile.family_financial_support || 0),
+          preferredCities: profile.preferred_cities || [],
+          relocationConfidence: profile.relocation_confidence,
+          willingnessToAdapt: profile.willingness_to_adapt,
+          concerns: profile.concerns || [],
+          priorities: profile.priorities || {},
+          sameCity: relocation.sameCity,
+        }
+      } else {
+        const currentMonthlySavings =
+          Number(profile.monthly_take_home || 0) -
+          Number(profile.monthly_expenses || 0) -
+          Number(profile.monthly_emi || 0)
+
+        const monthlySavingsDifference =
+          projectedMonthlySavings - currentMonthlySavings
+
+        let breakEvenMonths = relocation.breakEvenMonths
+        let breakEvenMessage = relocation.breakEvenMessage
+
+        if (
+          !relocation.sameCity &&
+          relocation.netRelocationCost > 0 &&
+          monthlySavingsDifference > 0
+        ) {
+          breakEvenMonths =
+            relocation.netRelocationCost / monthlySavingsDifference
+
+          breakEvenMessage =
+            'Estimated months to recover net relocation cost from additional monthly savings.'
+        } else if (
+          !relocation.sameCity &&
+          relocation.netRelocationCost > 0 &&
+          monthlySavingsDifference <= 0
+        ) {
+          breakEvenMonths = null
+          breakEvenMessage =
+            'The offer does not increase projected monthly savings, so a savings-based payback period cannot be estimated.'
+        }
+
+        financialSummary = {
+          careerStage: 'working_professional',
+          currentCity: profile.current_city || 'Not provided',
+          destinationCity: offer.destination_city,
+          company: offer.company_name,
+          role: offer.role_title,
+          currentMonthlyTakeHome:
+            Number(profile.monthly_take_home || 0),
+          currentMonthlyExpenses:
+            Number(profile.monthly_expenses || 0),
+          currentMonthlyEmi:
+            Number(profile.monthly_emi || 0),
+          currentMonthlySavings,
+          projectedMonthlySavings,
+          monthlySavingsDifference,
+          annualSavingsDifference: monthlySavingsDifference * 12,
+          destinationMonthlyExpenses: destinationExpenses,
+          grossRelocationCost: relocation.relocationCost,
+          netRelocationCost: relocation.netRelocationCost,
+          breakEvenMonths,
+          breakEvenMessage,
+          sameCity: relocation.sameCity,
+          relocationConfidence: profile.relocation_confidence,
+          willingnessToAdapt: profile.willingness_to_adapt,
+          concerns: profile.concerns || [],
+          priorities: profile.priorities || {},
+        }
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.5-flash-lite',
         contents: `
 You are MoveWise's relocation decision-support assistant.
 
-Explain the supplied financial comparison clearly and objectively.
+Explain the supplied analysis clearly, practically, and objectively.
 
 Rules:
-- Use only the supplied data. Do not invent figures, city facts,
-  tax estimates, salary information, or personal circumstances.
-- The supplied financial calculations are authoritative.
-  Do not recalculate or change them.
-- Explain the financial trade-offs and connect them to the user's
-  stated priorities and concerns where relevant.
-- Treat confidence and willingness-to-adapt scores as self-reported
-  preferences, not psychological or clinical assessments.
-- Do not make the relocation decision for the user.
-- Do not assume that a higher salary automatically means a better move.
-- If important information is missing, say what the user should verify.
-- Keep the language simple, balanced, and useful.
-- Return valid JSON only, using exactly these fields:
-  "summary": a concise explanation,
-  "keyConsiderations": an array of 3 to 5 short points,
-  "questionsToAsk": an array of 2 to 4 practical questions.
+- Use only the supplied data. Never invent salaries, expenses, city facts,
+  tax estimates, or personal circumstances.
+- The supplied calculations are authoritative. Do not recalculate or
+  change any financial values.
+- Net relocation cost already accounts for applicable benefits according
+  to the application's calculation helper. Do not subtract bonuses or
+  relocation assistance a second time.
+- Do not assume a higher salary automatically means a better move.
+- Connect financial trade-offs to the user's stated priorities and
+  concerns where relevant.
+- Treat confidence and adaptability scores as self-reported preferences,
+  not psychological or clinical assessments.
+- Do not make the decision for the user.
+- If important information is missing, explain what should be verified.
 
-Financial and personal data:
+For a recent graduate:
+- Do not compare the offer with a fictional current salary.
+- Focus on projected savings after joining, upfront moving affordability,
+  net relocation cost, and the relocation funding gap.
+- Family financial support is informational only. Do not add it to
+  available relocation funds or projected monthly savings.
+- Treat expected salary as a profile estimate; the offer's take-home
+  salary is used for the actual projection.
+
+For a working professional:
+- Compare current and projected monthly savings.
+- Explain the annual savings difference and net relocation payback
+  estimate when available.
+- Do not claim a payback period exists when it cannot be estimated.
+
+Return valid JSON only, with exactly these fields:
+"summary": a concise explanation,
+"keyConsiderations": an array of 3 to 5 short points,
+"questionsToAsk": an array of 2 to 4 practical questions.
+
+Analysis data:
 ${JSON.stringify(financialSummary, null, 2)}
         `,
         config: {
@@ -622,8 +916,9 @@ ${JSON.stringify(financialSummary, null, 2)}
         error: 'Unable to generate the AI explanation right now.',
       })
     }
-  }
+  },
 )
+
 
 /* POST: Recalculate the relocation analysis with caller-supplied overrides.
  *
@@ -730,26 +1025,34 @@ app.post('/api/analysis/:offerId', authenticateUser, async (req, res) => {
     const monthlySavingsDifference = projectedMonthlySavings - currentMonthlySavings
     const annualSavingsDifference  = monthlySavingsDifference * 12
 
-    const netRelocationCost =
-      pick('relocation_cost') -
-      pick('joining_bonus') -
-      pick('relocation_assistance')
+ 
+const relocation = calculateRelocationCosts(
+  profile.current_city,
+  offer.destination_city,
+  {
+    relocation_cost: pick('relocation_cost'),
+    joining_bonus: pick('joining_bonus'),
+    relocation_assistance: pick('relocation_assistance'),
+  },
+)
 
-    let breakEvenMonths = null
-    let breakEvenMessage
+const {
+  sameCity,
+  relocationCost,
+  netRelocationCost,
+} = relocation
 
-    if (netRelocationCost <= 0) {
-      breakEvenMonths = 0
-      breakEvenMessage =
-        'The joining bonus and relocation assistance cover the estimated relocation cost.'
-    } else if (monthlySavingsDifference > 0) {
-      breakEvenMonths = netRelocationCost / monthlySavingsDifference
-      breakEvenMessage =
-        'Estimated months needed to recover relocation costs from additional monthly savings.'
-    } else {
-      breakEvenMessage =
-        'There is no savings-based break-even under these assumptions because monthly savings do not increase.'
-    }
+let breakEvenMonths = relocation.breakEvenMonths
+let breakEvenMessage = relocation.breakEvenMessage
+
+if (!sameCity && netRelocationCost > 0) {
+  if (monthlySavingsDifference > 0) {
+    breakEvenMonths = netRelocationCost / monthlySavingsDifference
+    breakEvenMessage =
+      'Estimated months needed to recover the remaining relocation cost from additional monthly savings.'
+  }
+}
+
 
     res.json({
       success: true,
@@ -776,6 +1079,9 @@ app.post('/api/analysis/:offerId', authenticateUser, async (req, res) => {
         netRelocationCost,
         breakEvenMonths,
         breakEvenMessage,
+        sameCity,
+relocationCost,
+
       },
       note: 'These are scenario estimates based on the adjusted assumptions you have entered.',
     })
@@ -812,15 +1118,25 @@ function computeOfferMetrics(profile, offer) {
   const projectedMonthlySavings = offerTakeHome - destinationExpenses - offerEmi
   const monthlySavingsDifference = projectedMonthlySavings - currentMonthlySavings
 
-  const netRelocationCost =
-    Number(offer.relocation_cost || 0) -
-    Number(offer.joining_bonus || 0) -
-    Number(offer.relocation_assistance || 0)
+  
+const relocation = calculateRelocationCosts(
+  profile.current_city,
+  offer.destination_city,
+  offer,
+)
 
-  let breakEvenMonths = null
-  if (netRelocationCost <= 0) breakEvenMonths = 0
-  else if (monthlySavingsDifference > 0)
-    breakEvenMonths = netRelocationCost / monthlySavingsDifference
+const {
+  sameCity,
+  relocationCost,
+  netRelocationCost,
+} = relocation
+
+let breakEvenMonths = relocation.breakEvenMonths
+
+if (!sameCity && netRelocationCost > 0 && monthlySavingsDifference > 0) {
+  breakEvenMonths = netRelocationCost / monthlySavingsDifference
+}
+
 
   // First-year net gain vs. staying put, after one-time costs/benefits.
   const firstYearNetGain = monthlySavingsDifference * 12 - netRelocationCost
@@ -850,6 +1166,8 @@ function computeOfferMetrics(profile, offer) {
     projectedMonthlySavings,
     monthlySavingsDifference,
     annualSavingsDifference: monthlySavingsDifference * 12,
+    sameCity,
+    relocationCost,
     netRelocationCost,
     breakEvenMonths,
     firstYearNetGain,
@@ -993,7 +1311,7 @@ app.get('/api/ai-comparison', authenticateUser, async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash-lite',
       contents: `
 You are MoveWise's relocation decision-support assistant.
 
