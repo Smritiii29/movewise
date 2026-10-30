@@ -761,6 +761,7 @@ import Analysis from './pages/Analysis'
 import CompareOffers from './pages/CompareOffers'
 import ScenarioBuilder from './pages/ScenarioBuilder'
 import RelocationHub from './pages/RelocationHub'
+import JourneyChecklist from './pages/JourneyChecklist'
 
 import './App.css'
 
@@ -1434,7 +1435,9 @@ export default function Dashboard() {
             ) : page === 'Scenarios' ? (
               <ScenarioBuilder />
             ) : page === 'Relocation Hub' ? (
-              <RelocationHub />
+              <RelocationHub onOpenChecklist={() => openPage('Journey Checklist')} />
+            ) : page === 'Journey Checklist' ? (
+              <JourneyChecklist onBack={() => openPage('Relocation Hub')} />
             ) : (
               <section className="subpage">
                 <p className="eyebrow">MOVEWISE WORKSPACE</p>

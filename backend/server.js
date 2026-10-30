@@ -271,7 +271,55 @@ app.post('/api/offers', authenticateUser, async (req, res) => {
 
   res.status(201).json({ success: true, offer: data })
 })
+// Save joining date for all checklist tasks linked to an offer.
+app.patch('/api/journey/date', authenticateUser, async (req, res) => {
+  const { offer_id, joining_date } = req.body
 
+  if (!UUID_REGEX.test(offer_id || '')) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid offer ID.',
+    })
+  }
+
+  if (
+    joining_date &&
+    !/^\d{4}-\d{2}-\d{2}$/.test(joining_date)
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid joining date.',
+    })
+  }
+
+  const { data, error } = await req.supabase
+    .from('journey_tasks')
+    .update({ joining_date: joining_date || null })
+    .eq('offer_id', offer_id)
+    .eq('user_id', req.user.id)
+    .select('id')
+
+  if (error) {
+    console.error('Save journey joining date error:', error.message)
+
+    return res.status(500).json({
+      success: false,
+      message: 'Could not save joining date.',
+    })
+  }
+
+  if (!data || data.length === 0) {
+    return res.status(404).json({
+      success: false,
+      message: 'No checklist tasks found for this offer.',
+    })
+  }
+
+  res.json({
+    success: true,
+    message: 'Joining date saved.',
+  })
+})
 // PATCH: Update an existing offer belonging to the signed-in user.
 app.patch('/api/offers/:id', authenticateUser, async (req, res) => {
   const { id } = req.params
@@ -1370,6 +1418,136 @@ ${JSON.stringify(summary, null, 2)}
     return res.status(502).json({ error: 'Unable to generate the AI comparison right now.' })
   }
 })
+
+// ─── 90-Day Journey Routes ────────────────────────────────────────────────────
+
+const DEFAULT_JOURNEY_TASKS = [
+  // Before Moving
+  { phase: 'before_moving', task_key: 'confirm_offer',        title: 'Review and confirm your job offer letter',                    icon: 'Briefcase',     due_offset_days: -30 },
+  { phase: 'before_moving', task_key: 'arrange_accommodation',title: 'Research and arrange accommodation in the new city',          icon: 'Home',          due_offset_days: -21 },
+  { phase: 'before_moving', task_key: 'estimate_moving_costs',title: 'Estimate your moving and relocation expenses',                icon: 'DollarSign',    due_offset_days: -21 },
+  { phase: 'before_moving', task_key: 'confirm_joining_date', title: 'Confirm your joining date with HR',                           icon: 'Calendar',      due_offset_days: -14 },
+  { phase: 'before_moving', task_key: 'arrange_travel',       title: 'Book travel to your new city',                               icon: 'Plane',         due_offset_days: -14 },
+  { phase: 'before_moving', task_key: 'prepare_documents',    title: 'Prepare all required documents (ID, certificates, references)',icon: 'Package',      due_offset_days:  -7 },
+  // First Week
+  { phase: 'first_week',    task_key: 'settle_accommodation',     title: 'Settle into your accommodation',                         icon: 'Home',          due_offset_days:   2 },
+  { phase: 'first_week',    task_key: 'arrange_commute',          title: 'Arrange your daily commute to the office',               icon: 'MapPin',        due_offset_days:   3 },
+  { phase: 'first_week',    task_key: 'explore_neighbourhood',    title: 'Explore your new neighbourhood',                         icon: 'MapPin',        due_offset_days:   5 },
+  { phase: 'first_week',    task_key: 'record_unexpected_expenses',title: 'Record any unexpected first-week expenses',              icon: 'DollarSign',    due_offset_days:   7 },
+  // First Month
+  { phase: 'first_month',   task_key: 'track_actual_expenses',    title: 'Track your actual monthly expenses',                     icon: 'TrendingUp',    due_offset_days:  15 },
+  { phase: 'first_month',   task_key: 'compare_estimates',        title: 'Compare actual expenses against your estimates',         icon: 'ClipboardList', due_offset_days:  20 },
+  { phase: 'first_month',   task_key: 'update_budget',            title: 'Update your monthly budget based on actuals',            icon: 'Wallet',        due_offset_days:  30 },
+  // Days 31–90
+  { phase: 'days_31_90',    task_key: 'review_spending',          title: 'Review your overall spending patterns',                  icon: 'TrendingUp',    due_offset_days:  45 },
+  { phase: 'days_31_90',    task_key: 'complete_pending_tasks',   title: 'Complete any pending setup tasks',                       icon: 'CheckCircle2',  due_offset_days:  60 },
+  { phase: 'days_31_90',    task_key: 'track_adjustment',         title: 'Track how well you have settled in',                     icon: 'Star',          due_offset_days:  75 },
+  { phase: 'days_31_90',    task_key: 'generate_summary',         title: 'Generate your 90-day relocation summary',               icon: 'NotebookPen',   due_offset_days:  90 },
+]
+
+// GET /api/journey/tasks?offer_id=<uuid>
+app.get('/api/journey/tasks', authenticateUser, async (req, res) => {
+  const { offer_id } = req.query
+  try {
+    let query = req.supabase
+      .from('journey_tasks')
+      .select('*')
+      .order('due_offset_days', { ascending: true })
+
+    if (offer_id) query = query.eq('offer_id', offer_id)
+
+    const { data, error } = await query
+    if (error) return res.status(500).json({ message: error.message })
+    return res.json(data || [])
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+})
+
+// POST /api/journey/tasks/seed  — creates default tasks for user+offer (idempotent)
+app.post('/api/journey/tasks/seed', authenticateUser, async (req, res) => {
+  const { offer_id } = req.body
+  if (!offer_id) return res.status(400).json({ message: 'offer_id is required.' })
+
+  try {
+    // Find which task_keys already exist for this user+offer
+    const { data: existing, error: fetchErr } = await req.supabase
+      .from('journey_tasks')
+      .select('task_key')
+      .eq('offer_id', offer_id)
+
+    if (fetchErr) return res.status(500).json({ message: fetchErr.message })
+
+    const existingKeys = new Set((existing || []).map((r) => r.task_key))
+
+    const toInsert = DEFAULT_JOURNEY_TASKS
+      .filter((t) => !existingKeys.has(t.task_key))
+      .map((t) => ({
+        user_id: req.user.id,
+        offer_id,
+        phase: t.phase,
+        task_key: t.task_key,
+        title: t.title,
+        icon: t.icon,
+        due_offset_days: t.due_offset_days,
+        completed: false,
+      }))
+
+    if (toInsert.length === 0) return res.json({ seeded: 0 })
+
+    const { error: insertErr } = await req.supabase
+      .from('journey_tasks')
+      .insert(toInsert)
+
+    if (insertErr) return res.status(500).json({ message: insertErr.message })
+    return res.json({ seeded: toInsert.length })
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+})
+
+// PATCH /api/journey/tasks/:id  — update completed and/or notes
+app.patch('/api/journey/tasks/:id', authenticateUser, async (req, res) => {
+  const { id } = req.params
+  const { completed, notes, actual_due_date } = req.body
+
+  const updates = { updated_at: new Date().toISOString() }
+  if (completed !== undefined) updates.completed = Boolean(completed)
+  if (notes !== undefined) updates.notes = notes
+  if (actual_due_date !== undefined) updates.actual_due_date = actual_due_date
+
+  try {
+    const { data, error } = await req.supabase
+      .from('journey_tasks')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) return res.status(500).json({ message: error.message })
+    return res.json(data)
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+})
+
+// DELETE /api/journey/tasks/:id
+app.delete('/api/journey/tasks/:id', authenticateUser, async (req, res) => {
+  const { id } = req.params
+  try {
+    const { error } = await req.supabase
+      .from('journey_tasks')
+      .delete()
+      .eq('id', id)
+
+    if (error) return res.status(500).json({ message: error.message })
+    return res.json({ deleted: true })
+  } catch (err) {
+    return res.status(500).json({ message: err.message })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`MoveWise backend running at http://localhost:${PORT}`)

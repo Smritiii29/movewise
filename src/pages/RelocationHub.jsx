@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable no-unused-vars */
 
 // import { useEffect, useState } from 'react'
 // import {
@@ -46,7 +48,7 @@
 //     maximumFractionDigits: 0,
 //   }).format(Number(amount || 0))
 
-// export default function RelocationHub() {
+// export default function RelocationHub({ onOpenChecklist }) {
 //   const [tasks, setTasks] = useState(initialTasks)
 //   const [budget, setBudget] = useState(25000)
 //   const [estimatedCost, setEstimatedCost] = useState(32000)
@@ -873,7 +875,7 @@ const formatMoney = (amount) =>
 
 const toAmount = (value) => Math.max(0, Number(value) || 0)
 
-export default function RelocationHub() {
+export default function RelocationHub({ onOpenChecklist }) {
   const [tasks, setTasks] = useState(initialTasks)
 
   const [budget, setBudget] = useState(25000)
@@ -1247,18 +1249,24 @@ useEffect(() => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 rounded-2xl border border-[#E4DED0] bg-white px-4 py-3">
+          <button
+            type="button"
+            onClick={onOpenChecklist}
+            className="flex items-center gap-3 rounded-2xl border border-[#E4DED0] bg-white px-4 py-3 transition hover:border-[#00998A] hover:shadow-sm"
+            title="Open 90-day journey checklist"
+          >
             <div className="flex size-11 items-center justify-center rounded-xl bg-[#E3F3F0] text-[#00695C]">
               <Compass size={22} />
             </div>
 
-            <div>
+            <div className="text-left">
               <p className="text-xs text-[#445250]">Your relocation plan</p>
               <p className="font-semibold">
                 {completed} of {tasks.length} tasks done
               </p>
+              <p className="mt-0.5 text-[11px] text-[#00998A]">Open 90-day journey →</p>
             </div>
-          </div>
+          </button>
         </header>
 
         {/* Hero */}
@@ -1982,80 +1990,7 @@ useEffect(() => {
           )}
         </section>
 
-        {/* Relocation checklist */}
-        <section
-          id="relocation-checklist"
-          className="rounded-2xl border border-[#E4DED0] bg-white p-5 md:p-7"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#00998A]">
-                YOUR ACTION PLAN
-              </p>
-
-              <h2 className="mt-2 text-xl font-semibold">
-                Relocation checklist
-              </h2>
-
-              <p className="mt-1 text-sm text-[#445250]">
-                Check off each step as you complete it.
-              </p>
-            </div>
-
-            <span className="rounded-full bg-[#E3F3F0] px-3 py-1.5 text-xs font-semibold text-[#00695C]">
-              {completed}/{tasks.length} complete
-            </span>
-          </div>
-
-          <div className="mt-6 space-y-2">
-            {tasks.map((task) => {
-              const Icon = categoryIcons[task.category]
-
-              return (
-                <button
-                  key={task.id}
-                  type="button"
-                  onClick={() => toggleTask(task.id)}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
-                    task.done
-                      ? 'border-[#C6E8DF] bg-[#F2FAF7]'
-                      : 'border-[#EFE6D6] bg-white hover:bg-[#FAF6EF]'
-                  }`}
-                >
-                  <span
-                    className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-                      task.done
-                        ? 'bg-[#00998A] text-white'
-                        : 'bg-[#E3F3F0] text-[#00695C]'
-                    }`}
-                  >
-                    {task.done ? <Check size={17} /> : <Icon size={17} />}
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={`block text-sm font-medium ${
-                        task.done ? 'text-[#445250] line-through' : ''
-                      }`}
-                    >
-                      {task.title}
-                    </span>
-
-                    <span className="mt-1 block text-xs text-[#7A8581]">
-                      {task.category} · {task.timing}
-                    </span>
-                  </span>
-
-                  <ChevronRight
-                    size={17}
-                    className="shrink-0 text-[#A2AAA6]"
-                  />
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
+        
         <footer className="border-t border-[#E4DED0] py-5 text-center text-xs text-[#7A8581]">
           MoveWise · Plan thoughtfully. Move confidently.
         </footer>

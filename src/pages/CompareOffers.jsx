@@ -919,10 +919,9 @@ function getRecommendation(values, preferences) {
     Number(priorities.family || 0) >= 4 ||
     Number(priorities.work_life || 0) >= 4
 
-  let type = 'mixed'
-  let title = 'Consider the full picture'
-  let summary =
-    'Review the financial outcome alongside your personal priorities before deciding.'
+  let type 
+  let title 
+  let summary
 
   const annualDifference = difference * 12
   const relocationCostText =
